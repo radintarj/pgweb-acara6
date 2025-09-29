@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Peta Web Flores Timur</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""></script>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        #map {
+            flex-grow: 1;
+        }
+        .legend-in-control {
+            padding-left: 25px;
+            padding-bottom: 10px;
+        }
+        .legend-in-control table {
+            border-collapse: collapse;
+        }
+        .legend-in-control td {
+            padding: 1px 5px;
+            vertical-align: middle;
+            font-size: 12px;
+        }
+        .legend-in-control i {
+            width: 15px;
+            height: 15px;
+            opacity: 0.9;
+            border: 1px solid #555;
+            display: block;
+        }
+        .leaflet-control-search {
+            border: 2px solid rgba(0,0,0,0.2);
+            background-clip: padding-box;
+            border-radius: 4px;
+        }
+        .leaflet-control-search input {
+            border: none;
+            padding: 5px;
+        }
+        .leaflet-control-search button {
+            border: none;
+            background-color: #f8f9fa;
+            padding: 5px 8px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="#">Flores Timur</a>
+        <ul class="navbar-nav ms-auto">
+            <li class="nav-item">
+                <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#aboutModal">Tentang</a>
+            </li>
+        </ul>
+      </div>
+    </nav>
+    <div id="map"></div>
+
+    <!-- About Modal -->
+    <div class="modal fade" id="aboutModal" tabindex="-1" aria-labelledby="aboutModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h1 class="modal-title fs-5" id="aboutModalLabel">Tentang Peta</h1>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p>Peta Web yang dibuat untuk menampilkan data geografis Kabupaten Flores Timur.</p>
+            <p>Dibuat oleh:</p></p>
+            <p>Radinta Roudlatul Jannah</p>
+            <p>NIM 24/544007/SV/25307</p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <script>
+        // Initialize the map
+        const map = L.map('map').setView([-8.4, 122.9], 10);
+
+        // Base Layer
+        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        // --- Helper Functions ---
+        function getKecamatanColor(p) {
+            return p > 30000 ? '#8c510a' :
+                   p > 15000 ? '#d8b365' :
+                               '#f6e8c3';
+        }
+
+        function getJalanWeight(namaUnsur) {
+            switch (namaUnsur) {
+                case 'Jalan Propinsi': return 4;
+                case 'Jalan Kabupaten': return 3;
+                case 'Jalan Lain': return 2;
+                default: return 1;
+            }
+        }
+
+        // --- Define Layers ---
+
+        // Kecamatan Layer
+        const batasKecamatanLayer = L.geoJSON(null, { 
+            style: function(feature) {
+                return {
+                    fillColor: getKecamatanColor(feature.properties.Penduduk),
+                    weight: 1.5,
+                    opacity: 1,
+                    color: 'black',
+                    dashArray: '3',
+                    fillOpacity: 0.8
+                };
+            },
+            onEachFeature: function(feature, layer) {
+                if (feature.properties) {
+                    const props = feature.properties;
+                    const popupContent = `
+                        <div class="card">
+                            <div class="card-header">
+                                Informasi Kecamatan
+                            </div>
+                            <div class="card-body">
+                                <h5 class="card-title">${props.WADMKC || 'N/A'}</h5>
+                                <p class="card-text"><i class="bi bi-people"></i> Jumlah Penduduk: <strong>${props.Penduduk ? props.Penduduk.toLocaleString() : 'N/A'}</strong></p>
+                            </div>
+                        </div>
+                    `;
+                    layer.bindPopup(popupContent);
+                    layer.bindTooltip(props.WADMKC, { sticky: true });
+                }
+            }
+        });
+
+        // Jalan Layer
+        const jalanLayer = L.geoJSON(null, {
+            style: function(feature) {
+                return {
+                    color: "#ff0000",
+                    weight: getJalanWeight(feature.properties.NAMA_UNSUR),
+                    opacity: 0.8
+                };
+            },
+            onEachFeature: function(feature, layer) {
+                if (feature.properties && feature.properties.NAMA_UNSUR) {
+                    layer.bindPopup(feature.properties.NAMA_UNSUR);
+                }
+            }
+        });
+
+        // Sungai Layer
+        const sungaiLayer = L.geoJSON(null, {
+            style: {
+                color: "#0000ff",
+                weight: 2,
+                opacity: 0.8
+            }
+        });
+
+        // Define custom icon
+        const locationIcon = L.icon({
+            iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+            shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+            iconSize:    [25, 41],
+            iconAnchor:  [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize:  [41, 41]
+        });
+
+        // Toponimi Layer
+        const toponimiLayer = L.geoJSON(null, {
+            pointToLayer: function (feature, latlng) {
+                return L.marker(latlng, {icon: locationIcon});
+            },
+            onEachFeature: function (feature, layer) {
+                if (feature.properties && feature.properties.NAMOBJ) {
+                    layer.bindPopup(feature.properties.NAMOBJ);
+                }
+            }
+        });
+
+        // --- Fetch Data for Layers ---
+        Promise.all([
+            fetch('data/batas_kecamatan.geojson').then(response => response.json()),
+            fetch('data/jalan.geojson').then(response => response.json()),
+            fetch('data/sungai.geojson').then(response => response.json()),
+            fetch('data/toponimi.geojson').then(response => response.json())
+        ]).then(function (data) {
+            batasKecamatanLayer.addData(data[0]);
+            jalanLayer.addData(data[1]);
+            sungaiLayer.addData(data[2]);
+            toponimiLayer.addData(data[3]);
+
+            // Add layers to map by default
+            batasKecamatanLayer.addTo(map);
+            jalanLayer.addTo(map);
+            sungaiLayer.addTo(map);
+            toponimiLayer.addTo(map);
+
+            // --- Layer Control with Integrated Legends ---
+            const baseLayers = {
+                "OpenStreetMap": osm
+            };
+
+            const overlayLayers = {
+                "Batas Kecamatan (Penduduk)": batasKecamatanLayer,
+                "Jalan": jalanLayer,
+                "Sungai": sungaiLayer,
+                "Toponimi": toponimiLayer
+            };
+
+            const layerControl = L.control.layers(baseLayers, overlayLayers).addTo(map);
+
+            // --- Search Control ---
+            const searchControl = L.control({position: 'topleft'});
+            searchControl.onAdd = function (map) {
+                const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-search');
+                container.innerHTML = `
+                    <input type="search" id="search-input" placeholder="Cari Kecamatan..."/>
+                    <button type="button" id="search-button"><i class="bi bi-search"></i></button>
+                `;
+                L.DomEvent.disableClickPropagation(container);
+                return container;
+            };
+            searchControl.addTo(map);
+
+            // --- Inject Legends into Layer Control ---
+            const injectLegend = (layerName, legendHtml) => {
+                const labels = document.querySelectorAll('.leaflet-control-layers-overlays label');
+                labels.forEach(label => {
+                    if (label.textContent.trim().includes(layerName)) {
+                        const legendDiv = document.createElement('div');
+                        legendDiv.innerHTML = legendHtml;
+                        label.append(legendDiv);
+                    }
+                });
+            };
+
+            // Create Kecamatan Legend HTML
+            const grades = [0, 15000, 30000];
+            let kecamatanLegendHtml = '<div class="legend-in-control"><table>';
+            for (let i = 0; i < grades.length; i++) {
+                const from = grades[i];
+                const to = grades[i + 1];
+                kecamatanLegendHtml += '<tr>' +
+                                    '<td><i style="background:' + getKecamatanColor(from + 1) + '"></i></td>' +
+                                    '<td>' + from.toLocaleString() + (to ? '&ndash;' + to.toLocaleString() : '+') + '</td>' +
+                                 '</tr>';
+            }
+            kecamatanLegendHtml += '</table></div>';
+            injectLegend("Batas Kecamatan (Penduduk)", kecamatanLegendHtml);
+
+            // Create Jalan Legend HTML
+            const jalanTipes = ['Jalan Propinsi', 'Jalan Kabupaten', 'Jalan Lain'];
+            let jalanLegendHtml = '<div class="legend-in-control"><table>';
+            jalanTipes.forEach(tipe => {
+                let weight = getJalanWeight(tipe);
+                jalanLegendHtml += '<tr>' +
+                               '<td><i style="background: #ff0000; height: ' + weight + 'px; border: none; display: block; margin: 7px 0;"></i></td>' +
+                               '<td>' + tipe + '</td>' +
+                           '</tr>';
+            });
+            jalanLegendHtml += '</table></div>';
+            injectLegend("Jalan", jalanLegendHtml);
+
+            // Create Sungai Legend HTML
+            let sungaiLegendHtml = '<div class="legend-in-control"><table>';
+            sungaiLegendHtml += '<tr>' +
+                               '<td><i style="background: #0000ff; height: 2px; border: none; display: block; margin: 7px 0;"></i></td>' +
+                               '<td>Sungai</td>' +
+                           '</tr>';
+            sungaiLegendHtml += '</table></div>';
+            injectLegend("Sungai", sungaiLegendHtml);
+
+            // --- Search Functionality ---
+            const searchButton = document.getElementById('search-button');
+            const searchInput = document.getElementById('search-input');
+            
+            const performSearch = () => {
+                const searchTerm = searchInput.value.toLowerCase();
+                let found = false;
+                if (searchTerm === '') return;
+
+                batasKecamatanLayer.eachLayer(function(layer) {
+                    if (layer.feature.properties.WADMKC.toLowerCase() === searchTerm) {
+                        map.fitBounds(layer.getBounds());
+                        layer.openPopup();
+                        found = true;
+                    }
+                });
+
+                if (!found) {
+                    alert('Kecamatan tidak ditemukan!');
+                }
+            };
+
+            searchButton.addEventListener('click', performSearch);
+            searchInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    performSearch();
+                }
+            });
+
+        }).catch(error => console.error("Error loading GeoJSON data:", error));
+
+    </script>
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+</body>
+</html>
